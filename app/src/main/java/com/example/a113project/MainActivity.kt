@@ -44,25 +44,27 @@ import android.app.AlertDialog
 import android.os.ParcelUuid
 import android.bluetooth.le.ScanFilter
 
-
-
 private const val REQUEST_ENABLE_DIS = 30
-
 private const val RUNTIME_PERMISSION_REQUEST_CODE = 2
-
-
 private const val REQUEST_BLUETOOTH_SCAN_PERMISSION = 123
 private const val REQUEST_BLUETOOTH_CONNECT_PERMISSION = 124
 private const val REQUEST_ACCESS_FINE_LOCATION = 125
-
+private const val MY_BLUETOOTH_PERMISSION_REQUEST=126
 
 class MainActivity : AppCompatActivity() {
+
+    private val bleScanner by lazy {
+        mBluetoothAdapter.bluetoothLeScanner
+    }
+
+    private val scanSettings = ScanSettings.Builder()
+        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+        .build()
 
     private val mBluetoothAdapter: BluetoothAdapter by lazy {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothManager.adapter
     }
-
 
     fun Context.hasPermission(permissionType: String): Boolean {
         return ContextCompat.checkSelfPermission(this, permissionType) ==
@@ -78,8 +80,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
-
     private fun startBleScan() {
         if (!hasRequiredRuntimePermissions()) {
             requestRelevantRuntimePermissions()
@@ -88,7 +88,7 @@ class MainActivity : AppCompatActivity() {
             // 已經有所需的權限，開始進行 BLE 掃描
             bleScanner.startScan(null, scanSettings, scanCallback)
             isScanning = true
-            Log.e("startBleScan","a")
+            Log.e("startBleScan","${isScanning}")
         } else {
             // 權限尚未獲得，可以進行額外的處理，例如再次要求權限或提示用戶
             // 此處應增加相應的邏輯
@@ -160,7 +160,6 @@ class MainActivity : AppCompatActivity() {
                     RUNTIME_PERMISSION_REQUEST_CODE
                 )
             }
-
             val dialog = builder.create()
             dialog.show()
         }
@@ -198,18 +197,16 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+            MY_BLUETOOTH_PERMISSION_REQUEST -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    enableBluetooth()
+                } else {
+                    // Handle the case where Bluetooth permission is denied
+                    Toast.makeText(this, "Bluetooth permission denied", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
-
-
-
-    private val bleScanner by lazy {
-        mBluetoothAdapter.bluetoothLeScanner
-    }
-
-    private val scanSettings = ScanSettings.Builder()
-        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-        .build()
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -219,15 +216,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
     private var isScanning = false
         set(value) {
             field = value
             runOnUiThread { scanButton.text = if (value) "Stop Scan" else "Start Scan" }
         }
-
-
-
 
     private var discoverable = false
     private var broadcastReceiver: BroadcastReceiver? = null
@@ -236,6 +229,8 @@ class MainActivity : AppCompatActivity() {
     // 創建一個 ActivityResultLauncher 以處理啟動啟用藍牙的 Intent
     private val enableBluetoothActivityResult: ActivityResultLauncher<Intent> =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            Log.e("BA","${result}")
+
             if (result.resultCode == RESULT_OK) {
                 Log.d("Working:", "Bluetooth enabled")
                 Toast.makeText(this, "Bluetooth enabled", Toast.LENGTH_SHORT).show()
@@ -270,9 +265,44 @@ class MainActivity : AppCompatActivity() {
                 startBleScan()
             }
         }
-        setUpBT()
+        requestPermissionsAndEnableBluetooth()
+        //setUpBT()
     }
 
+
+    private fun requestPermissionsAndEnableBluetooth() {
+        if (!hasRequiredRuntimePermissions()) {
+            enableBluetooth()
+            requestRelevantRuntimePermissions()
+        } else {
+            enableBluetooth()
+        }
+    }
+
+    private fun enableBluetooth() {
+        if (mBluetoothAdapter == null) {
+            Toast.makeText(this, "This device does not support Bluetooth", Toast.LENGTH_SHORT)
+                .show()
+        } else if (!mBluetoothAdapter.isEnabled) {
+            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                enableBluetoothActivityResult.launch(enableBtIntent)
+            } else {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                    MY_BLUETOOTH_PERMISSION_REQUEST
+                )
+            }
+        } else {
+            makeDiscoverable()
+        }
+    }
+/*
     private fun setUpBT() {
         if (mBluetoothAdapter == null) {
             // Device does not support Bluetooth
@@ -280,16 +310,31 @@ class MainActivity : AppCompatActivity() {
                 .show()
         } else if (!mBluetoothAdapter.isEnabled) {
             val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            enableBluetoothActivityResult.launch(enableBtIntent)
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.BLUETOOTH_CONNECT
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                // 已經有權限，可以啟動 Intent
+                enableBluetoothActivityResult.launch(enableBtIntent)
+                Toast.makeText(this, "Please enable Bluetooth NOW!!!!!", Toast.LENGTH_SHORT).show()
+            } else {
+                // 需要請求權限
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                    MY_BLUETOOTH_PERMISSION_REQUEST
+                )
+            }
+            //enableBluetoothActivityResult.launch(enableBtIntent)
             Toast.makeText(this, "Please enable Bluetooth NOW!!!!!", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, "Yay", Toast.LENGTH_SHORT).show()
             makeDiscoverable()
         }
     }
-
+*/
     private fun makeDiscoverable() {
-
         // 在這裡檢查 BLUETOOTH_SCAN 權限
         if (ContextCompat.checkSelfPermission(
                 this,
@@ -328,7 +373,6 @@ class MainActivity : AppCompatActivity() {
             )
         }
     }
-
 
     override fun onDestroy() {
         if (broadcastReceiver != null) {
