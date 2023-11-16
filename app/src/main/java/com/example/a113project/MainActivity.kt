@@ -14,6 +14,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import android.Manifest
+import android.annotation.SuppressLint
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
@@ -43,19 +44,42 @@ import timber.log.Timber
 import android.app.AlertDialog
 import android.os.ParcelUuid
 import android.bluetooth.le.ScanFilter
+import android.view.ViewGroup
+import com.example.a113project.databinding.ActivityMainBinding
+
 
 private const val REQUEST_ENABLE_DIS = 30
 private const val RUNTIME_PERMISSION_REQUEST_CODE = 2
-private const val REQUEST_BLUETOOTH_SCAN_PERMISSION = 123
-private const val REQUEST_BLUETOOTH_CONNECT_PERMISSION = 124
-private const val REQUEST_ACCESS_FINE_LOCATION = 125
-private const val MY_BLUETOOTH_PERMISSION_REQUEST=126
+private const val REQUEST_BLUETOOTH_SCAN_PERMISSION = 3
+private const val REQUEST_BLUETOOTH_CONNECT_PERMISSION = 4
+private const val REQUEST_ACCESS_FINE_LOCATION = 5
+private const val MY_BLUETOOTH_PERMISSION_REQUEST= 6
+
 
 class MainActivity : AppCompatActivity() {
+
+    var bluetoothGatt: BluetoothGatt? = null
 
     private val bleScanner by lazy {
         mBluetoothAdapter.bluetoothLeScanner
     }
+
+    private val scanResults = mutableListOf<ScanResult>()
+
+    private val scanResultAdapter: ScanResultAdapter by lazy {
+        ScanResultAdapter(scanResults) { result ->
+            // User tapped on a scan result
+            if (isScanning) {
+                stopBleScan()
+            }
+            with(result.device) {
+                Log.w("ScanResultAdapter", "Connecting to $address")
+                //connectGatt(context, false, gattCallback)
+            }
+        }
+    }
+
+    //private lateinit var scanResultAdapter: ScanResultAdapter
 
     private val scanSettings = ScanSettings.Builder()
         .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -85,7 +109,14 @@ class MainActivity : AppCompatActivity() {
             requestRelevantRuntimePermissions()
         } else if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             == PackageManager.PERMISSION_GRANTED) {
+            var builder = ScanFilter.Builder()
+            builder.setDeviceName(null)
             // 已經有所需的權限，開始進行 BLE 掃描
+            scanResults.clear()
+            scanResults.filter { device ->
+                !device.device.name.equals("Unnamed")
+            }
+            scanResultAdapter.notifyDataSetChanged()
             bleScanner.startScan(null, scanSettings, scanCallback)
             isScanning = true
             Log.e("startBleScan","${isScanning}")
@@ -142,6 +173,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun Activity.requestPermission(permission: String, requestCode: Int) {
+        ActivityCompat.requestPermissions(this, arrayOf(permission), requestCode)
+    }
 
     private fun requestBluetoothPermissions() {
         runOnUiThread {
@@ -209,10 +243,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val scanCallback = object : ScanCallback() {
+        @SuppressLint("MissingPermission")
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            with(result.device) {
-                Log.i("ScanCallback", "Found BLE device! Name: ${name ?: "Unnamed"}, address: $address")
+            val indexQuery = scanResults.indexOfFirst { it.device.address == result.device.address }
+            if (indexQuery != -1) { // A scan result already exists with the same address
+                scanResults[indexQuery] = result
+                scanResultAdapter.notifyItemChanged(indexQuery)
+            } else {
+                with(result.device) {
+                    Log.i("ScanCallback", "Found BLE device! Name: ${name ?: "Unnamed"}, address: $address")
+                }
+                if (result.device.name != null)
+                    scanResults.add(result)
+//                Log.e("123", "scanRESULTS: ${scanResults.size}")
+//                var i = 0;
+//                for(i in 0 until scanResults.size) {
+//                    if (scanResults.get(i).device.name != null) {
+//                        Log.e("456", "$i: ${scanResults.get(i).device.name}")
+//                    } else {
+//                        Log.e("456", "$i: null")
+//                    }
+//                }
+//                Log.e("length", "size: ${scanResults.size}")
+
+                scanResultAdapter.notifyDataSetChanged()
             }
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            Log.e("ScanCallback", "onScanFailed: code $errorCode")
         }
     }
 
@@ -253,10 +312,24 @@ class MainActivity : AppCompatActivity() {
         }
 
     private lateinit var scanButton: Button // 將按鈕變數宣告為類別級別變數
+    private lateinit var binding: ActivityMainBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        //scanResultAdapter = ScanResultAdapter
+        binding.scanResultsRecyclerView.adapter = scanResultAdapter
+        binding.scanResultsRecyclerView.layoutManager = LinearLayoutManager(this, RecyclerView.VERTICAL, false)
+        binding.scanResultsRecyclerView.isNestedScrollingEnabled = false
+
+        val animator = binding.scanResultsRecyclerView.itemAnimator
+        if (animator is SimpleItemAnimator) {
+            animator.supportsChangeAnimations = false
+        }
+
         scanButton = findViewById(R.id.scan_button) // 初始化按鈕 (將這行程式碼移到 onCreate 開頭)
         scanButton.setOnClickListener {
             if (isScanning) {
@@ -265,6 +338,7 @@ class MainActivity : AppCompatActivity() {
                 startBleScan()
             }
         }
+        //setupRecyclerView()
         requestPermissionsAndEnableBluetooth()
         //setUpBT()
     }
@@ -302,6 +376,24 @@ class MainActivity : AppCompatActivity() {
             makeDiscoverable()
         }
     }
+/*
+    private fun setupRecyclerView() {
+        scan_results_recycler_view.apply {
+            adapter = scanResultAdapter
+            layoutManager  = LinearLayoutManager(
+                this@MainActivity,
+                RecyclerView.VERTICAL,
+                false
+            )
+            isNestedScrollingEnabled = false
+        }
+
+        val animator = scan_results_recycler_view.itemAnimator
+        if (animator is SimpleItemAnimator) {
+            animator.supportsChangeAnimations = false
+        }
+    }
+    */
 /*
     private fun setUpBT() {
         if (mBluetoothAdapter == null) {
