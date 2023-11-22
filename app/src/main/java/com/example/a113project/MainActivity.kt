@@ -46,9 +46,11 @@ import android.os.ParcelUuid
 import android.bluetooth.le.ScanFilter
 import android.view.ViewGroup
 import com.example.a113project.databinding.ActivityMainBinding
+import com.example.a113project.bleSettings.BLEPermission
 
 
-private const val REQUEST_ENABLE_DIS = 30
+
+private const val REQUEST_ENABLE_DIS = 300
 private const val RUNTIME_PERMISSION_REQUEST_CODE = 2
 private const val REQUEST_BLUETOOTH_SCAN_PERMISSION = 3
 private const val REQUEST_BLUETOOTH_CONNECT_PERMISSION = 4
@@ -58,7 +60,11 @@ private const val MY_BLUETOOTH_PERMISSION_REQUEST= 6
 
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var BLEPermission: BLEPermission
+
     var bluetoothGatt: BluetoothGatt? = null
+
+
 
     private val bleScanner by lazy {
         mBluetoothAdapter.bluetoothLeScanner
@@ -74,10 +80,32 @@ class MainActivity : AppCompatActivity() {
             }
             with(result.device) {
                 Log.w("ScanResultAdapter", "Connecting to $address")
-                //connectGatt(context, false, gattCallback)
+                bluetoothGatt = connectGatt(applicationContext,false,gattCallback)
             }
         }
     }
+
+    private val gattCallback = object : BluetoothGattCallback() {
+        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+            val deviceAddress = gatt.device.address
+
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    Log.w("BluetoothGattCallback", "Successfully connected to $deviceAddress")
+                    // TODO: Store a reference to BluetoothGatt
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    Log.w("BluetoothGattCallback", "Successfully disconnected from $deviceAddress")
+                    gatt.close()
+                }
+            } else {
+                Log.w("BluetoothGattCallback", "Error $status encountered for $deviceAddress! Disconnecting...")
+                gatt.close()
+            }
+        }
+    }
+
+
+
 
     //private lateinit var scanResultAdapter: ScanResultAdapter
 
@@ -255,17 +283,6 @@ class MainActivity : AppCompatActivity() {
                 }
                 if (result.device.name != null)
                     scanResults.add(result)
-//                Log.e("123", "scanRESULTS: ${scanResults.size}")
-//                var i = 0;
-//                for(i in 0 until scanResults.size) {
-//                    if (scanResults.get(i).device.name != null) {
-//                        Log.e("456", "$i: ${scanResults.get(i).device.name}")
-//                    } else {
-//                        Log.e("456", "$i: null")
-//                    }
-//                }
-//                Log.e("length", "size: ${scanResults.size}")
-
                 scanResultAdapter.notifyDataSetChanged()
             }
         }
@@ -317,6 +334,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -376,6 +394,8 @@ class MainActivity : AppCompatActivity() {
             makeDiscoverable()
         }
     }
+
+
 /*
     private fun setupRecyclerView() {
         scan_results_recycler_view.apply {
@@ -442,6 +462,7 @@ class MainActivity : AppCompatActivity() {
                 // 如果權限已經授予，執行相應的操作
                 if (mBluetoothAdapter.scanMode != BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE) {
                     val discoverableIntent = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE)
+                    discoverableIntent.putExtra(BluetoothAdapter.EXTRA_LOCAL_NAME, "testphone")
                     discoverableIntent.putExtra(
                         BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION,
                         REQUEST_ENABLE_DIS
