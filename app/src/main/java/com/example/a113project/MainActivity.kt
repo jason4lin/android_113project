@@ -5,7 +5,6 @@ import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.os.Bundle
 import android.os.Build
 import android.util.Log
@@ -18,23 +17,11 @@ import android.annotation.SuppressLint
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.View;
 import android.widget.Button;
-import android.widget.ListView;
-import android.widget.Switch;
-import android.widget.TextView;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.bluetooth.le.*
-import android.widget.CompoundButton;
-import android.widget.CompoundButton.OnCheckedChangeListener;
-import android.widget.ArrayAdapter;
-import androidx.core.content.getSystemService
-import java.util.Set;
-import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -42,13 +29,14 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
 import timber.log.Timber
 import android.app.AlertDialog
-import android.os.ParcelUuid
 import android.bluetooth.le.ScanFilter
-import android.view.ViewGroup
+import android.os.Handler
+import android.os.Looper
+import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProvider
+//import com.example.a113project.bleSettings.BluetoothViewModel
 import com.example.a113project.databinding.ActivityMainBinding
-import com.example.a113project.bleSettings.BLEPermission
-
-
+import java.util.UUID
 
 private const val REQUEST_ENABLE_DIS = 300
 private const val RUNTIME_PERMISSION_REQUEST_CODE = 2
@@ -56,15 +44,13 @@ private const val REQUEST_BLUETOOTH_SCAN_PERMISSION = 3
 private const val REQUEST_BLUETOOTH_CONNECT_PERMISSION = 4
 private const val REQUEST_ACCESS_FINE_LOCATION = 5
 private const val MY_BLUETOOTH_PERMISSION_REQUEST= 6
+private const val CCC_DESCRIPTOR_UUID = "00002902-0000-1000-8000-00805f9b34fb"
 
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var BLEPermission: BLEPermission
-
     var bluetoothGatt: BluetoothGatt? = null
-
-
+    private lateinit var scanButton: Button // 將按鈕變數宣告為類別級別變數
 
     private val bleScanner by lazy {
         mBluetoothAdapter.bluetoothLeScanner
@@ -86,6 +72,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            when (status) {
+                BluetoothGatt.GATT_SUCCESS -> {
+                    Log.e("有進來了", "有進來了")
+                    val value = characteristic?.value
+                    Log.i("abc","${value?:"null"}")
+                    Log.i("BluetoothGattCallback", "Read characteristic ${characteristic?.uuid}:\n${characteristic?.value?.toHexString()}")
+                }
+                BluetoothGatt.GATT_READ_NOT_PERMITTED -> {
+                    Log.e("有進來了", "有進來了")
+                    Log.e("BluetoothGattCallback", "Read not permitted for ${characteristic?.uuid}!")
+                }
+                else -> {
+                    Log.e("有進來了", "有進來了")
+                    Log.e("BluetoothGattCallback", "Characteristic read failed for ${characteristic?.uuid}, error: $status")
+                }
+            }
+        }
+
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             val deviceAddress = gatt.device.address
 
@@ -93,6 +102,9 @@ class MainActivity : AppCompatActivity() {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     Log.w("BluetoothGattCallback", "Successfully connected to $deviceAddress")
                     // TODO: Store a reference to BluetoothGatt
+                    bluetoothGatt = gatt
+                    gatt.discoverServices()
+                    readService()
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.w("BluetoothGattCallback", "Successfully disconnected from $deviceAddress")
                     gatt.close()
@@ -102,12 +114,128 @@ class MainActivity : AppCompatActivity() {
                 gatt.close()
             }
         }
+        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+            Log.i("onServiceDiscover","aaa")
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                with(gatt) {
+                    Log.w("BluetoothGattCallback", "Discovered ${services.size} services for ${device.address}")
+                    printGattTable()
+                }
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    Log.e("service size", "service size: ${gatt.services.size}")
+                    for (service in gatt.services) {
+                        Log.e("Bluetooth", "服務: ${service.uuid}")
+                        for (characteristic in service.characteristics) {
+                            Log.i("Bluetooth", "特徵: ${characteristic.uuid}")
+                            Log.i("Bluetooth", "isreadable: ${characteristic.isReadable()}")
+                            //val char = gatt.getService(service.uuid)?.getCharacteristic(characteristic.uuid)
+                            //Log.i("readChar","${gatt.readCharacteristic(characteristic)}")
+                        }
+                    }
+                    val char = gatt.getService(UUID.fromString("ac670292-6e02-4ec7-ab78-8f3b8352e078")).getCharacteristic(UUID.fromString("c7ac3e78-caf4-426d-9f2a-b558df862457"))
+                    Log.i("readChar","${gatt.readCharacteristic(char)}")
+                    Log.e("end for", "end for")
+                }
+//                if (status == BluetoothGatt.GATT_SUCCESS) {
+//                    for (service in gatt.services) {
+//                        for (characteristic in service.characteristics) {
+//                            Log.i()
+//                            if (characteristic.isReadable()) {
+//                                gatt.readCharacteristic(characteristic)
+//                            }
+//                        }
+//                    }
+//                }
+            } else {
+                Log.e("BluetoothGattCallback", "Service discovery failed with status $status")
+            }
+        }
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic
+        ) {
+            with(characteristic) {
+                Log.i("BluetoothGattCallback", "Characteristic $uuid changed | value: ${value.toHexString()}")
+            }
+        }
+
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int
+        ) {
+            with(characteristic) {
+                when (status) {
+                    BluetoothGatt.GATT_SUCCESS -> {
+                        Log.i("BluetoothGattCallback", "Wrote to characteristic $uuid | value: ${value.toHexString()}")
+                    }
+                    BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH -> {
+                        Log.e("BluetoothGattCallback", "Write exceeded connection ATT MTU!")
+                    }
+                    BluetoothGatt.GATT_WRITE_NOT_PERMITTED -> {
+                        Log.e("BluetoothGattCallback", "Write not permitted for $uuid!")
+                    }
+                    else -> {
+                        Log.e("BluetoothGattCallback", "Characteristic write failed for $uuid, error: $status")
+                    }
+                }
+            }
+        }
+
     }
 
+    private fun readService() {
+        // 用你要连接的服务的 UUID 替换下面的 UUID
+        val serviceUuid = UUID.fromString("ac670292-6e02-4ec7-ab78-8f3b8352e078")
+        val charUuid = UUID.fromString("c7ac3e78-caf4-426d-9f2a-b558df862457")
+        val serviceChar = bluetoothGatt?.getService(serviceUuid)?.getCharacteristic(charUuid)
+        if (serviceChar?.isReadable() == true) {
+            bluetoothGatt?.readCharacteristic(serviceChar)
+        }
+    }
 
+    private fun BluetoothGatt.printGattTable() {
+        if (services.isEmpty()) {
+            Log.i("printGattTable", "No service and characteristic available, call discoverServices() first?")
+            return
+        }
+        services.forEach { service ->
+            val characteristicsTable = service.characteristics.joinToString(
+                separator = "\n|--",
+                prefix = "|--"
+            ) { it.uuid.toString() }
+            Log.i("printGattTable", "\nService ${service.uuid}\nCharacteristics:\n$characteristicsTable"
+            )
+        }
+    }
 
-
-    //private lateinit var scanResultAdapter: ScanResultAdapter
+//    private val callback = object : BluetoothGattCallback(){
+//        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+//            val deviceAddress = gatt.device.address
+//
+//            if(status==BluetoothGatt.GATT_SUCCESS){
+//                if (status == BluetoothProfile.STATE_CONNECTED){
+//                    Timber.w("BluetoothGattCallback", "Successfully connected to $deviceAddress")
+//                    bluetoothGatt = gatt
+//                    Handler(Looper.getMainLooper()).post{
+//                        bluetoothGatt?.discoverServices()
+//                    }
+//                }
+//            }
+//        }
+//
+//        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+//            if (status == BluetoothGatt.GATT_SUCCESS) {
+//                with(gatt) {
+//                    Log.w("BluetoothGattCallback", "Discovered ${services.size} services for ${device.address}")
+//                    // Handle the discovered services, e.g., iterate through services and characteristics
+//                    printGattTable()
+//                }
+//            } else {
+//                Log.e("BluetoothGattCallback", "Service discovery failed with status $status")
+//            }
+//        }
+//    }
 
     private val scanSettings = ScanSettings.Builder()
         .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -117,6 +245,7 @@ class MainActivity : AppCompatActivity() {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothManager.adapter
     }
+
 
     fun Context.hasPermission(permissionType: String): Boolean {
         return ContextCompat.checkSelfPermission(this, permissionType) ==
@@ -154,7 +283,7 @@ class MainActivity : AppCompatActivity() {
             Log.e("startBleScan","b")
             ActivityCompat.requestPermissions(
                 this,
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.BLUETOOTH_SCAN,Manifest.permission.BLUETOOTH_CONNECT ),
                 REQUEST_ACCESS_FINE_LOCATION
             )
         }
@@ -227,6 +356,161 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
+
+    fun BluetoothGattCharacteristic.isReadable(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_READ)
+
+    fun BluetoothGattCharacteristic.isWritable(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_WRITE)
+
+    fun BluetoothGattCharacteristic.isWritableWithoutResponse(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)
+
+    fun BluetoothGattCharacteristic.isIndicatable(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_INDICATE)
+
+    fun BluetoothGattCharacteristic.isNotifiable(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_NOTIFY)
+
+    fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
+        Timber.w("ATT MTU changed to $mtu, success: ${status == BluetoothGatt.GATT_SUCCESS}")
+    }
+
+    fun BluetoothGattCharacteristic.containsProperty(property: Int): Boolean {
+        return properties and property != 0
+    }
+
+    val ServiceUuid = UUID.fromString("ac670292-6e02-4ec7-ab78-8f3b8352e078")
+
+
+    fun writeDescriptor(descriptor: BluetoothGattDescriptor, payload: ByteArray) {
+        bluetoothGatt?.let { gatt ->
+            descriptor.value = payload
+            gatt.writeDescriptor(descriptor)
+        } ?: error("Not connected to a BLE device!")
+    }
+
+
+
+    fun enableNotifications(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+        if (characteristic.isNotifiable()) {
+            val cccdUuid = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+            val descriptor = characteristic.getDescriptor(cccdUuid)
+            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            gatt.writeDescriptor(descriptor)
+            gatt.setCharacteristicNotification(characteristic, true)
+        }
+        val cccdUuid = UUID.fromString(CCC_DESCRIPTOR_UUID)
+        val payload = when {
+            characteristic.isIndicatable() -> BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+            characteristic.isNotifiable() -> BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            else -> {
+                Log.e("ConnectionManager", "${characteristic.uuid} doesn't support notifications/indications")
+                return
+            }
+        }
+
+        characteristic.getDescriptor(cccdUuid)?.let { cccDescriptor ->
+            if (bluetoothGatt?.setCharacteristicNotification(characteristic, true) == false) {
+                Log.e("ConnectionManager", "setCharacteristicNotification failed for ${characteristic.uuid}")
+                return
+            }
+            writeDescriptor(cccDescriptor, payload)
+        } ?: Log.e("ConnectionManager", "${characteristic.uuid} doesn't contain the CCC descriptor!")
+    }
+
+    fun disableNotifications(characteristic: BluetoothGattCharacteristic) {
+        if (!characteristic.isNotifiable() && !characteristic.isIndicatable()) {
+            Log.e("ConnectionManager", "${characteristic.uuid} doesn't support indications/notifications")
+            return
+        }
+
+        val cccdUuid = UUID.fromString(CCC_DESCRIPTOR_UUID)
+        characteristic.getDescriptor(cccdUuid)?.let { cccDescriptor ->
+            if (bluetoothGatt?.setCharacteristicNotification(characteristic, false) == false) {
+                Log.e("ConnectionManager", "setCharacteristicNotification failed for ${characteristic.uuid}")
+                return
+            }
+            writeDescriptor(cccDescriptor, BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE)
+        } ?: Log.e("ConnectionManager", "${characteristic.uuid} doesn't contain the CCC descriptor!")
+    }
+
+//    override fun onCharacteristicChanged(
+//        gatt: BluetoothGatt,
+//        characteristic: BluetoothGattCharacteristic
+//    ) {
+//        with(characteristic) {
+//            Log.i("BluetoothGattCallback", "Characteristic $uuid changed | value: ${value.toHexString()}")
+//        }
+//    }
+
+//    override fun onCharacteristicRead(
+//        gatt: BluetoothGatt?,
+//        characteristic: BluetoothGattCharacteristic?,
+//        status: Int
+//    ) {
+//        when (status) {
+//            BluetoothGatt.GATT_SUCCESS -> {
+//                Log.i("BluetoothGattCallback", "Read characteristic ${characteristic?.uuid}:\n${characteristic?.value?.toHexString()}")
+//            }
+//            BluetoothGatt.GATT_READ_NOT_PERMITTED -> {
+//                Log.e("BluetoothGattCallback", "Read not permitted for ${characteristic?.uuid}!")
+//            }
+//            else -> {
+//                Log.e("BluetoothGattCallback", "Characteristic read failed for ${characteristic?.uuid}, error: $status")
+//            }
+//        }
+//    }
+
+//    override fun onCharacteristicWrite(
+//        gatt: BluetoothGatt,
+//        characteristic: BluetoothGattCharacteristic,
+//        status: Int
+//    ) {
+//        with(characteristic) {
+//            when (status) {
+//                BluetoothGatt.GATT_SUCCESS -> {
+//                    Log.i("BluetoothGattCallback", "Wrote to characteristic $uuid | value: ${value.toHexString()}")
+//                }
+//                BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH -> {
+//                    Log.e("BluetoothGattCallback", "Write exceeded connection ATT MTU!")
+//                }
+//                BluetoothGatt.GATT_WRITE_NOT_PERMITTED -> {
+//                    Log.e("BluetoothGattCallback", "Write not permitted for $uuid!")
+//                }
+//                else -> {
+//                    Log.e("BluetoothGattCallback", "Characteristic write failed for $uuid, error: $status")
+//                }
+//            }
+//        }
+//    }
+
+    fun ByteArray.toHexString(): String =
+        joinToString(separator = " ", prefix = "0x") { String.format("%02X", it) }
+//    val readBytes: ByteArray // ... obtained from onCharacteristicRead()
+//    val batteryLevel = readBytes.first().toInt() // 0x64 -> 100 (percent)
+//    val fourBytes: ByteArray // ... obtained from onCharacteristicRead()
+//    val numericalValue = (fourBytes[3].toInt() and 0xFF shl 24) +
+//            (fourBytes[2].toInt() and 0xFF shl 16) +
+//            (fourBytes[1].toInt() and 0xFF shl 8) +
+//            (fourBytes[0].toInt() and 0xFF)
+
+    fun BluetoothGattDescriptor.isReadable(): Boolean =
+        containsPermission(BluetoothGattDescriptor.PERMISSION_READ) ||
+                containsPermission(BluetoothGattDescriptor.PERMISSION_READ_ENCRYPTED) ||
+                containsPermission(BluetoothGattDescriptor.PERMISSION_READ_ENCRYPTED_MITM)
+    fun BluetoothGattDescriptor.isWritable(): Boolean =
+        containsPermission(BluetoothGattDescriptor.PERMISSION_WRITE) ||
+                containsPermission(BluetoothGattDescriptor.PERMISSION_WRITE_ENCRYPTED) ||
+                containsPermission(BluetoothGattDescriptor.PERMISSION_WRITE_ENCRYPTED_MITM) ||
+                containsPermission(BluetoothGattDescriptor.PERMISSION_WRITE_SIGNED) ||
+                containsPermission(BluetoothGattDescriptor.PERMISSION_WRITE_SIGNED_MITM)
+
+    fun BluetoothGattDescriptor.containsPermission(permission: Int): Boolean =
+        permissions and permission != 0
+
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -284,12 +568,23 @@ class MainActivity : AppCompatActivity() {
                 if (result.device.name != null)
                     scanResults.add(result)
                 scanResultAdapter.notifyDataSetChanged()
+
+                //connectToDevice(result.device)
             }
         }
 
         override fun onScanFailed(errorCode: Int) {
             Log.e("ScanCallback", "onScanFailed: code $errorCode")
         }
+    }
+
+    private fun connectToDevice(device: BluetoothDevice) {
+        // Stop the BLE scan if it's currently running
+        stopBleScan()
+
+        // Connect to the selected device
+        Log.w("ScanResultAdapter", "Connecting to ${device.address}")
+        bluetoothGatt = device.connectGatt(applicationContext, false, gattCallback)
     }
 
     private var isScanning = false
@@ -328,17 +623,25 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-    private lateinit var scanButton: Button // 將按鈕變數宣告為類別級別變數
+
     private lateinit var binding: ActivityMainBinding
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        // Set content view and initialize views
+        initView()
 
+        // Request necessary permissions and enable Bluetooth
+        requestPermissionsAndEnableBluetooth()
+    }
+
+    private fun initView() {
+        // Initialize views, adapters, and layout manager
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        //scanResultAdapter = ScanResultAdapter
+        // RecyclerView setup
         binding.scanResultsRecyclerView.adapter = scanResultAdapter
         binding.scanResultsRecyclerView.layoutManager = LinearLayoutManager(this, RecyclerView.VERTICAL, false)
         binding.scanResultsRecyclerView.isNestedScrollingEnabled = false
@@ -348,7 +651,8 @@ class MainActivity : AppCompatActivity() {
             animator.supportsChangeAnimations = false
         }
 
-        scanButton = findViewById(R.id.scan_button) // 初始化按鈕 (將這行程式碼移到 onCreate 開頭)
+        // Scan button setup
+        scanButton = findViewById(R.id.scan_button)
         scanButton.setOnClickListener {
             if (isScanning) {
                 stopBleScan()
@@ -356,11 +660,7 @@ class MainActivity : AppCompatActivity() {
                 startBleScan()
             }
         }
-        //setupRecyclerView()
-        requestPermissionsAndEnableBluetooth()
-        //setUpBT()
     }
-
 
     private fun requestPermissionsAndEnableBluetooth() {
         if (!hasRequiredRuntimePermissions()) {
@@ -396,56 +696,6 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-/*
-    private fun setupRecyclerView() {
-        scan_results_recycler_view.apply {
-            adapter = scanResultAdapter
-            layoutManager  = LinearLayoutManager(
-                this@MainActivity,
-                RecyclerView.VERTICAL,
-                false
-            )
-            isNestedScrollingEnabled = false
-        }
-
-        val animator = scan_results_recycler_view.itemAnimator
-        if (animator is SimpleItemAnimator) {
-            animator.supportsChangeAnimations = false
-        }
-    }
-    */
-/*
-    private fun setUpBT() {
-        if (mBluetoothAdapter == null) {
-            // Device does not support Bluetooth
-            Toast.makeText(this, "This device does not support Bluetooth", Toast.LENGTH_SHORT)
-                .show()
-        } else if (!mBluetoothAdapter.isEnabled) {
-            val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                // 已經有權限，可以啟動 Intent
-                enableBluetoothActivityResult.launch(enableBtIntent)
-                Toast.makeText(this, "Please enable Bluetooth NOW!!!!!", Toast.LENGTH_SHORT).show()
-            } else {
-                // 需要請求權限
-                ActivityCompat.requestPermissions(
-                    this,
-                    arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
-                    MY_BLUETOOTH_PERMISSION_REQUEST
-                )
-            }
-            //enableBluetoothActivityResult.launch(enableBtIntent)
-            Toast.makeText(this, "Please enable Bluetooth NOW!!!!!", Toast.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "Yay", Toast.LENGTH_SHORT).show()
-            makeDiscoverable()
-        }
-    }
-*/
     private fun makeDiscoverable() {
         // 在這裡檢查 BLUETOOTH_SCAN 權限
         if (ContextCompat.checkSelfPermission(
@@ -488,6 +738,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // 停止BLE掃描
+        stopBleScan()
+        // 取消BroadcastReceiver的註冊
         if (broadcastReceiver != null) {
             unregisterReceiver(broadcastReceiver)
             broadcastReceiver = null
@@ -495,3 +748,4 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 }
+
