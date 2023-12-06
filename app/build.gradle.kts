@@ -53,6 +53,10 @@ dependencies {
     implementation  ("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation  ("androidx.recyclerview:recyclerview:1.3.2")
 
+    implementation ("androidx.camera:camera-camera2:1.2.1")    // CameraX核心庫
+    implementation ("androidx.camera:camera-view:1.2.1")    // CameraX視圖庫
+    implementation ("androidx.camera:camera-lifecycle:1.2.1")    // CameraX生命週期庫
+
     implementation  ("com.jakewharton.timber:timber:5.0.1")
 
     implementation  ("org.jetbrains.kotlin:kotlin-symbol-processing-api:1.4.0-rc-dev-experimental-20200828")

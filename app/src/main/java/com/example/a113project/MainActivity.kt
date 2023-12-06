@@ -79,20 +79,31 @@ class MainActivity : AppCompatActivity() {
         ) {
             when (status) {
                 BluetoothGatt.GATT_SUCCESS -> {
-                    Log.e("有進來了", "有進來了")
                     val value = characteristic?.value
                     Log.i("abc","${value?:"null"}")
                     Log.i("BluetoothGattCallback", "Read characteristic ${characteristic?.uuid}:\n${characteristic?.value?.toHexString()}")
                 }
                 BluetoothGatt.GATT_READ_NOT_PERMITTED -> {
-                    Log.e("有進來了", "有進來了")
                     Log.e("BluetoothGattCallback", "Read not permitted for ${characteristic?.uuid}!")
                 }
                 else -> {
-                    Log.e("有進來了", "有進來了")
                     Log.e("BluetoothGattCallback", "Characteristic read failed for ${characteristic?.uuid}, error: $status")
                 }
             }
+        }
+
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray
+        ) {
+            super.onCharacteristicChanged(gatt, characteristic, value)
+            val value = characteristic?.value
+            with(characteristic) {
+                Log.i("BluetoothGattCallback", "onchange Characteristic $uuid changed | value: ${characteristic?.value?.toHexString()}")
+            }
+            Log.i("bcd","${value?:"null"}")
+            Log.i("BluetoothGattCallback", "onchange characteristic ${characteristic?.uuid}:\n${characteristic?.value?.toHexString()}")
         }
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -105,6 +116,8 @@ class MainActivity : AppCompatActivity() {
                     bluetoothGatt = gatt
                     gatt.discoverServices()
                     readService()
+                    val intent_to_cam = Intent(this@MainActivity , Camera::class.java)
+                    startActivity(intent_to_cam)
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.w("BluetoothGattCallback", "Successfully disconnected from $deviceAddress")
                     gatt.close()
@@ -114,8 +127,8 @@ class MainActivity : AppCompatActivity() {
                 gatt.close()
             }
         }
+
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            Log.i("onServiceDiscover","aaa")
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 with(gatt) {
                     Log.w("BluetoothGattCallback", "Discovered ${services.size} services for ${device.address}")
@@ -128,28 +141,17 @@ class MainActivity : AppCompatActivity() {
                         for (characteristic in service.characteristics) {
                             Log.i("Bluetooth", "特徵: ${characteristic.uuid}")
                             Log.i("Bluetooth", "isreadable: ${characteristic.isReadable()}")
-                            //val char = gatt.getService(service.uuid)?.getCharacteristic(characteristic.uuid)
-                            //Log.i("readChar","${gatt.readCharacteristic(characteristic)}")
                         }
                     }
                     val char = gatt.getService(UUID.fromString("ac670292-6e02-4ec7-ab78-8f3b8352e078")).getCharacteristic(UUID.fromString("c7ac3e78-caf4-426d-9f2a-b558df862457"))
                     Log.i("readChar","${gatt.readCharacteristic(char)}")
                     Log.e("end for", "end for")
                 }
-//                if (status == BluetoothGatt.GATT_SUCCESS) {
-//                    for (service in gatt.services) {
-//                        for (characteristic in service.characteristics) {
-//                            Log.i()
-//                            if (characteristic.isReadable()) {
-//                                gatt.readCharacteristic(characteristic)
-//                            }
-//                        }
-//                    }
-//                }
             } else {
                 Log.e("BluetoothGattCallback", "Service discovery failed with status $status")
             }
         }
+
         override fun onCharacteristicChanged(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic
@@ -208,34 +210,6 @@ class MainActivity : AppCompatActivity() {
             )
         }
     }
-
-//    private val callback = object : BluetoothGattCallback(){
-//        override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-//            val deviceAddress = gatt.device.address
-//
-//            if(status==BluetoothGatt.GATT_SUCCESS){
-//                if (status == BluetoothProfile.STATE_CONNECTED){
-//                    Timber.w("BluetoothGattCallback", "Successfully connected to $deviceAddress")
-//                    bluetoothGatt = gatt
-//                    Handler(Looper.getMainLooper()).post{
-//                        bluetoothGatt?.discoverServices()
-//                    }
-//                }
-//            }
-//        }
-//
-//        override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-//            if (status == BluetoothGatt.GATT_SUCCESS) {
-//                with(gatt) {
-//                    Log.w("BluetoothGattCallback", "Discovered ${services.size} services for ${device.address}")
-//                    // Handle the discovered services, e.g., iterate through services and characteristics
-//                    printGattTable()
-//                }
-//            } else {
-//                Log.e("BluetoothGattCallback", "Service discovery failed with status $status")
-//            }
-//        }
-//    }
 
     private val scanSettings = ScanSettings.Builder()
         .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -436,65 +410,10 @@ class MainActivity : AppCompatActivity() {
         } ?: Log.e("ConnectionManager", "${characteristic.uuid} doesn't contain the CCC descriptor!")
     }
 
-//    override fun onCharacteristicChanged(
-//        gatt: BluetoothGatt,
-//        characteristic: BluetoothGattCharacteristic
-//    ) {
-//        with(characteristic) {
-//            Log.i("BluetoothGattCallback", "Characteristic $uuid changed | value: ${value.toHexString()}")
-//        }
-//    }
-
-//    override fun onCharacteristicRead(
-//        gatt: BluetoothGatt?,
-//        characteristic: BluetoothGattCharacteristic?,
-//        status: Int
-//    ) {
-//        when (status) {
-//            BluetoothGatt.GATT_SUCCESS -> {
-//                Log.i("BluetoothGattCallback", "Read characteristic ${characteristic?.uuid}:\n${characteristic?.value?.toHexString()}")
-//            }
-//            BluetoothGatt.GATT_READ_NOT_PERMITTED -> {
-//                Log.e("BluetoothGattCallback", "Read not permitted for ${characteristic?.uuid}!")
-//            }
-//            else -> {
-//                Log.e("BluetoothGattCallback", "Characteristic read failed for ${characteristic?.uuid}, error: $status")
-//            }
-//        }
-//    }
-
-//    override fun onCharacteristicWrite(
-//        gatt: BluetoothGatt,
-//        characteristic: BluetoothGattCharacteristic,
-//        status: Int
-//    ) {
-//        with(characteristic) {
-//            when (status) {
-//                BluetoothGatt.GATT_SUCCESS -> {
-//                    Log.i("BluetoothGattCallback", "Wrote to characteristic $uuid | value: ${value.toHexString()}")
-//                }
-//                BluetoothGatt.GATT_INVALID_ATTRIBUTE_LENGTH -> {
-//                    Log.e("BluetoothGattCallback", "Write exceeded connection ATT MTU!")
-//                }
-//                BluetoothGatt.GATT_WRITE_NOT_PERMITTED -> {
-//                    Log.e("BluetoothGattCallback", "Write not permitted for $uuid!")
-//                }
-//                else -> {
-//                    Log.e("BluetoothGattCallback", "Characteristic write failed for $uuid, error: $status")
-//                }
-//            }
-//        }
-//    }
 
     fun ByteArray.toHexString(): String =
         joinToString(separator = " ", prefix = "0x") { String.format("%02X", it) }
-//    val readBytes: ByteArray // ... obtained from onCharacteristicRead()
-//    val batteryLevel = readBytes.first().toInt() // 0x64 -> 100 (percent)
-//    val fourBytes: ByteArray // ... obtained from onCharacteristicRead()
-//    val numericalValue = (fourBytes[3].toInt() and 0xFF shl 24) +
-//            (fourBytes[2].toInt() and 0xFF shl 16) +
-//            (fourBytes[1].toInt() and 0xFF shl 8) +
-//            (fourBytes[0].toInt() and 0xFF)
+
 
     fun BluetoothGattDescriptor.isReadable(): Boolean =
         containsPermission(BluetoothGattDescriptor.PERMISSION_READ) ||
