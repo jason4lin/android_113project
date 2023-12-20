@@ -46,7 +46,6 @@ private const val REQUEST_ACCESS_FINE_LOCATION = 5
 private const val MY_BLUETOOTH_PERMISSION_REQUEST= 6
 private const val CCC_DESCRIPTOR_UUID = "00002902-0000-1000-8000-00805f9b34fb"
 
-
 class MainActivity : AppCompatActivity() {
 
     var bluetoothGatt: BluetoothGatt? = null
@@ -97,13 +96,16 @@ class MainActivity : AppCompatActivity() {
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
-            super.onCharacteristicChanged(gatt, characteristic, value)
-            val value = characteristic?.value
             with(characteristic) {
-                Log.i("BluetoothGattCallback", "onchange Characteristic $uuid changed | value: ${characteristic?.value?.toHexString()}")
+                Log.i("BluetoothGattCallback", "Characteristic $uuid changed | value: ${value.toHexString()}")
             }
-            Log.i("bcd","${value?:"null"}")
-            Log.i("BluetoothGattCallback", "onchange characteristic ${characteristic?.uuid}:\n${characteristic?.value?.toHexString()}")
+//            val value = characteristic?.value
+//            Log.i("bcd","${value?:"null"}")
+//            with(characteristic) {
+//                Log.i("BluetoothGattCallback", "onchange Characteristic $uuid changed | value: ${characteristic?.value?.toHexString()}")
+//            }
+//            Log.i("bcd","${value?:"null"}")
+//            Log.i("BluetoothGattCallback", "onchange characteristic ${characteristic?.uuid}:\n${characteristic?.value?.toHexString()}")
         }
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -117,7 +119,7 @@ class MainActivity : AppCompatActivity() {
                     gatt.discoverServices()
                     readService()
                     val intent_to_cam = Intent(this@MainActivity , Camera::class.java)
-                    startActivity(intent_to_cam)
+                    //startActivity(intent_to_cam)
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.w("BluetoothGattCallback", "Successfully disconnected from $deviceAddress")
                     gatt.close()
@@ -141,6 +143,10 @@ class MainActivity : AppCompatActivity() {
                         for (characteristic in service.characteristics) {
                             Log.i("Bluetooth", "特徵: ${characteristic.uuid}")
                             Log.i("Bluetooth", "isreadable: ${characteristic.isReadable()}")
+                            if (characteristic.uuid == UUID.fromString("c7ac3e78-caf4-426d-9f2a-b558df862457")) {
+                                Log.i("suc","suc enable")
+                                enableNotifications(gatt, characteristic)
+                            }
                         }
                     }
                     val char = gatt.getService(UUID.fromString("ac670292-6e02-4ec7-ab78-8f3b8352e078")).getCharacteristic(UUID.fromString("c7ac3e78-caf4-426d-9f2a-b558df862457"))
@@ -149,15 +155,6 @@ class MainActivity : AppCompatActivity() {
                 }
             } else {
                 Log.e("BluetoothGattCallback", "Service discovery failed with status $status")
-            }
-        }
-
-        override fun onCharacteristicChanged(
-            gatt: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic
-        ) {
-            with(characteristic) {
-                Log.i("BluetoothGattCallback", "Characteristic $uuid changed | value: ${value.toHexString()}")
             }
         }
 
@@ -330,8 +327,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
-
     fun BluetoothGattCharacteristic.isReadable(): Boolean =
         containsProperty(BluetoothGattCharacteristic.PROPERTY_READ)
 
@@ -357,7 +352,6 @@ class MainActivity : AppCompatActivity() {
 
     val ServiceUuid = UUID.fromString("ac670292-6e02-4ec7-ab78-8f3b8352e078")
 
-
     fun writeDescriptor(descriptor: BluetoothGattDescriptor, payload: ByteArray) {
         bluetoothGatt?.let { gatt ->
             descriptor.value = payload
@@ -365,9 +359,17 @@ class MainActivity : AppCompatActivity() {
         } ?: error("Not connected to a BLE device!")
     }
 
-
-
     fun enableNotifications(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+        Log.i("intonotifaction","into notifaction")
+        val cccdUuid = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+        val descriptor = characteristic.getDescriptor(cccdUuid)
+        if (descriptor != null) {
+            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            gatt.writeDescriptor(descriptor)
+            gatt.setCharacteristicNotification(characteristic, true)
+        } else {
+            Log.e("enableNotifications", "CCCD descriptor not found for ${characteristic.uuid}")
+        }
         if (characteristic.isNotifiable()) {
             val cccdUuid = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
             val descriptor = characteristic.getDescriptor(cccdUuid)
@@ -375,7 +377,7 @@ class MainActivity : AppCompatActivity() {
             gatt.writeDescriptor(descriptor)
             gatt.setCharacteristicNotification(characteristic, true)
         }
-        val cccdUuid = UUID.fromString(CCC_DESCRIPTOR_UUID)
+        //val cccdUuid = UUID.fromString(CCC_DESCRIPTOR_UUID)
         val payload = when {
             characteristic.isIndicatable() -> BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
             characteristic.isNotifiable() -> BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
@@ -495,15 +497,6 @@ class MainActivity : AppCompatActivity() {
         override fun onScanFailed(errorCode: Int) {
             Log.e("ScanCallback", "onScanFailed: code $errorCode")
         }
-    }
-
-    private fun connectToDevice(device: BluetoothDevice) {
-        // Stop the BLE scan if it's currently running
-        stopBleScan()
-
-        // Connect to the selected device
-        Log.w("ScanResultAdapter", "Connecting to ${device.address}")
-        bluetoothGatt = device.connectGatt(applicationContext, false, gattCallback)
     }
 
     private var isScanning = false
