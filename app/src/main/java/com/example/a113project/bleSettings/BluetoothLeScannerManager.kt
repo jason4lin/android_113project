@@ -1,25 +1,18 @@
 package com.example.a113project.bleSettings
 
-import android.bluetooth.*
-import android.content.Context
-import android.util.Log
-import android.Manifest
-import android.annotation.SuppressLint
-import androidx.core.content.ContextCompat
-import android.content.pm.PackageManager
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.le.ScanResult
-import android.bluetooth.le.ScanSettings
-import android.bluetooth.le.*
-import android.bluetooth.BluetoothManager
-import android.bluetooth.le.ScanCallback
-import android.content.Intent
-import android.widget.Toast
-import com.example.a113project.Camera
-import com.example.a113project.R
-import com.example.a113project.ScanResultAdapter
 //import com.example.a113project.bleSettings.BluetoothViewModel
-import com.example.a113project.databinding.ActivityMainBinding
+
+import android.Manifest
+import android.R.attr.value
+import android.annotation.SuppressLint
+import android.bluetooth.*
+import android.bluetooth.le.*
+import android.content.Context
+import android.content.pm.PackageManager
+import android.util.Log
+import android.widget.Toast
+import androidx.core.content.ContextCompat
+import com.example.a113project.ScanResultAdapter
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.UUID
@@ -39,7 +32,6 @@ class BluetoothLeScannerManager(
         private set
 
     private val mBluetoothAdapter: BluetoothAdapter by lazy {
-        //val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothManager.adapter
     }
@@ -100,19 +92,17 @@ class BluetoothLeScannerManager(
     }
 
     fun readCharacteristic() {
-        val service = bluetoothGatt?.getService(UUID.fromString("ac670292-6e02-4ec7-ab78-8f3b8352e078")) // 用你的服务UUID替换
+        val service = bluetoothGatt?.getService(UUID.fromString("ac670292-6e02-4ec7-ab78-8f3b8352e078"))
         val characteristic = service?.getCharacteristic(UUID.fromString("c7ac3e78-caf4-426d-9f2a-b558df862457"))
         if (characteristic != null) {
-            val byteArrayAsString = convertByteArrayToString(characteristic.value)
-            val floatArray = parseByteArray(byteArrayAsString)
-
-            if (floatArray != null) {
-                // 現在您擁有解析的浮點數陣列，可以對其進行後續處理
-                for (value in floatArray) {
-                    println("Parsed Float: $value")
-                }
+            val value = characteristic.value
+            if (value != null && value.size >= 4) {
+                val valueAsString = bytesToHex(value)
+                val floatValues = parseHexToFloatArray(valueAsString)
+                Log.i("but read Data", "數值: ${floatValues.contentToString()}")
+                // 現在您可以繼續處理這個值，例如顯示或儲存
             } else {
-                Toast.makeText(context, "無效的數據", Toast.LENGTH_SHORT).show()
+                Log.i("but read Data", "數據無效或太短")
             }
         } else {
             Toast.makeText(context, "特征未找到", Toast.LENGTH_SHORT).show()
@@ -213,20 +203,22 @@ class BluetoothLeScannerManager(
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onCharacteristicRead(
-            gatt: BluetoothGatt?,
-            characteristic: BluetoothGattCharacteristic?,
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
             status: Int
         ) {
-            if (status == BluetoothGatt.GATT_SUCCESS) {
-                val value = characteristic?.value
-                if (value != null && value.size >= 4) {  // 確保數據至少有4個字節（float的大小）
-                    val floatVal = ByteBuffer.wrap(value).order(ByteOrder.BIG_ENDIAN).float
-                    Log.i("Characteristic Data", "數值: $value")
+            if (status === BluetoothGatt.GATT_SUCCESS) {
+                if (value != null && value.size >= 4) { // 確保數據至少有4個字節（float的大小）
+                    val data = convertBytesToFloats(value)
+                    Log.i("on read Data", "數值: ${bytesToHex(value)}")
+                    Log.i("on read Data", "數值: ${data.contentToString()}")
+                    // 現在您可以繼續處理這個值，例如解析成浮點數
                 } else {
-                    Log.i("Characteristic Data", "數據無效或太短")
+                    Log.i("on read Data", "數據無效或太短")
                 }
             } else {
-                Log.e("Characteristic Read", "讀取失敗，狀態: $status")
+                Log.e("on read Data", "讀取失敗，狀態: $status")
             }
         }
 
@@ -235,17 +227,24 @@ class BluetoothLeScannerManager(
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray
         ) {
-            // 處理讀取到的數據
-            with(characteristic) {
-                val value = characteristic?.value
-                if (value != null && value.size >= 4) {  // 確保數據至少有4個字節（float的大小）
-                    val floatVal = ByteBuffer.wrap(value).order(ByteOrder.LITTLE_ENDIAN).float
-                    //Log.i("Characteristic Data", "浮點數: $value")
-                    //Log.i("Characteristic Data", "浮點數值: $floatVal")
-                } else {
-                    Log.i("Characteristic Data", "數據無效或太短")
-                }
+            //gatt.readCharacteristic(characteristic);
+            //val value = characteristic.value
+            if (value != null && value.size >= 4) {
+                val data = convertBytesToFloats(value)
+                Log.i("on change Data", "數值: ${bytesToHex(value)}")
+                Log.i("on change Data", "數值: ${data.contentToString()}")
+            } else {
+                Log.i("on change Data", "數據無效或太短")
             }
+        }
+
+        fun convertBytesToFloats(bytes: ByteArray): FloatArray {
+            val byteBuffer = ByteBuffer.wrap(bytes)
+            byteBuffer.order(ByteOrder.LITTLE_ENDIAN) // 或 ByteOrder.BIG_ENDIAN，取決於來源數據的字節順序
+            val floatBuffer = byteBuffer.asFloatBuffer()
+            val floats = FloatArray(floatBuffer.capacity())
+            floatBuffer.get(floats)
+            return floats
         }
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -258,8 +257,14 @@ class BluetoothLeScannerManager(
                     bluetoothGatt = gatt
                     gatt.discoverServices()
                     readService()
-                    //val intent_to_cam = Intent(this@MainActivity , Camera::class.java)
-                    //startActivity(intent_to_cam)
+                    // 請求新的MTU大小
+                    val newMtuSize = 512; // 你希望請求的MTU大小
+                    val mtuResult = gatt.requestMtu(newMtuSize);
+                    if (mtuResult) {
+                        Log.i("BluetoothGattCallbackMTU", "Requested MTU size of " + newMtuSize);
+                    } else {
+                        Log.e("BluetoothGattCallbackMTU", "Failed to request MTU");
+                    }
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.w("BluetoothGattCallback", "Successfully disconnected from $deviceAddress")
                     gatt.close()
@@ -276,8 +281,7 @@ class BluetoothLeScannerManager(
                     Log.w("BluetoothGattCallback", "Discovered ${services.size} services for ${device.address}")
                     printGattTable()
                 }
-                if (status == BluetoothGatt.GATT_SUCCESS) {
- //                   Log.e("service size", "service size: ${gatt.services.size}")
+//                   Log.e("service size", "service size: ${gatt.services.size}")
 //                    for (service in gatt.services) {
 //                        Log.e("Bluetooth", "服務: ${service.uuid}")
 //                        for (characteristic in service.characteristics) {
@@ -292,7 +296,6 @@ class BluetoothLeScannerManager(
                     val char = gatt.getService(UUID.fromString("ac670292-6e02-4ec7-ab78-8f3b8352e078")).getCharacteristic(UUID.fromString("c7ac3e78-caf4-426d-9f2a-b558df862457"))
                     enableNotifications(gatt, char)
                     //Log.i("readChar","${gatt.readCharacteristic(char)}")
-                }
             } else {
                 Log.e("BluetoothGattCallback", "Service discovery failed with status $status")
             }
@@ -328,6 +331,35 @@ class BluetoothLeScannerManager(
             }
         }
 
+        override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Log.d("BluetoothMTU", "MTU changed to: $mtu")
+            } else {
+                Log.e("BluetoothMTU", "MTU change failed")
+            }
+        }
+
+    }
+
+    fun parseHexToFloatArray(hexString: String?): FloatArray {
+        // 每個浮點數是4字節，所以每8個十六進制字符代表一個浮點數
+        val floatCount = hexString!!.length / 8
+        val floats = FloatArray(floatCount)
+
+        for (i in 0 until floatCount) {
+            val intBits = hexString.substring(i * 8, (i + 1) * 8).toLong(16).toInt()
+            floats[i] = Float.fromBits(intBits)
+        }
+
+        return floats
+    }
+
+    private fun bytesToHex(bytes: ByteArray): String? {
+        val builder = java.lang.StringBuilder()
+        for (b in bytes) {
+            builder.append(String.format("%02x", b))
+        }
+        return builder.toString()
     }
 
     fun ByteArray.toHexString(): String =
