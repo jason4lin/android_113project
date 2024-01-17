@@ -44,7 +44,8 @@ private const val REQUEST_ACCESS_FINE_LOCATION = 5
 private const val MY_BLUETOOTH_PERMISSION_REQUEST= 6
 
 
-class MainActivity : AppCompatActivity(), BluetoothLeScannerManager.PermissionRequestCallback {
+class MainActivity : AppCompatActivity(), BluetoothLeScannerManager.PermissionRequestCallback,
+    BluetoothLeScannerManager.DataReceiver {
 
     private lateinit var bluetoothLeScannerManager: BluetoothLeScannerManager
     private lateinit var bluetoothPermissions: blePermissions
@@ -54,12 +55,16 @@ class MainActivity : AppCompatActivity(), BluetoothLeScannerManager.PermissionRe
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         bluetoothLeScannerManager = BluetoothLeScannerManager(this,this)
+        bluetoothLeScannerManager = BluetoothLeScannerManager(this, this).apply {
+            setDataReceiver(this@MainActivity)
+        }
         bluetoothPermissions = blePermissions(this,this).apply {
             setEnableBluetoothActivityResult(enableBluetoothActivityResult)
             setEnableDiscoverableActivityResult(enableDiscoverableActivityResult)
         }
         initView()
         requestPermissionsAndEnableBluetooth()
+        startCameraActivity()
     }
 
 
@@ -97,16 +102,18 @@ class MainActivity : AppCompatActivity(), BluetoothLeScannerManager.PermissionRe
         }
     }
 
+
+    override fun onReceiveData(data: ByteArray) {
+        // 在這裡處理接收到的數據，例如更新UI
+    }
+
     private fun readCharacteristic() {
         bluetoothLeScannerManager.readCharacteristic()
     }
 
-    private fun startBleScan() {
-        bluetoothLeScannerManager.startScan()
-    }
-
-    private fun stopBleScan() {
-        bluetoothLeScannerManager.stopScan()
+    fun startCameraActivity() {
+        val intent = Intent(this, Camera::class.java)
+        startActivity(intent)
     }
 
 
@@ -153,7 +160,7 @@ class MainActivity : AppCompatActivity(), BluetoothLeScannerManager.PermissionRe
                 val allPermissionsGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
 
                 if (allPermissionsGranted) {
-                    startBleScan()
+                    bluetoothLeScannerManager.startScan()
                 } else {
                     // 至少一個請求的權限被拒絕
                     // 在這裡顯示解釋為什麼需要這些權限的訊息
