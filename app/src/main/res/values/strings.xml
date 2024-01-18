@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">113Project_CameraX</string>
+    <string name="take_photo">拍照</string> <!-- 按钮 -->
+</resources>
